@@ -1,8 +1,10 @@
-﻿using System.Drawing;
+﻿using System;
+using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Numerics;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.ColorSpaces.Conversion;
 using SixLabors.ImageSharp.Formats.Bmp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
@@ -101,6 +103,40 @@ namespace NewWorldMinimap.Core.Util
                 for (int x = 0; x < r.Length; x++)
                 {
                     r[x] = r[x].X < threshold ? White : Black;
+                }
+            });
+
+        /// <summary>
+        /// Detects white pixels.
+        /// </summary>
+        /// <param name="context">The context.</param>
+        /// <param name="threshold">The threshold.</param>
+        /// <returns>The same context.</returns>
+        public static IImageProcessingContext HslFilter(this IImageProcessingContext context, Hsl color, float hTolerance, float sTolerance, float lTolerance)
+            => context.ProcessPixelRowsAsVector4(r =>
+            {
+                for (int x = 0; x < r.Length; x++)
+                {
+                    r[x] = color.IsSimilarTo(Hsl.FromRgb(r[x]), hTolerance, sTolerance, lTolerance) ? Black : White;
+                }
+            });
+
+        /// <summary>
+        /// Detects white pixels.
+        /// </summary>
+        /// <param name="context">The context.</param>
+        /// <param name="threshold">The threshold.</param>
+        /// <returns>The same context.</returns>
+        public static IImageProcessingContext HslFilter(this IImageProcessingContext context)
+            => context.ProcessPixelRowsAsVector4(r =>
+            {
+                for (int x = 0; x < r.Length; x++)
+                {
+                    //Hsl c = Hsl.FromRgb(r[x]);
+                    SixLabors.ImageSharp.ColorSpaces.Hsl c = new ColorSpaceConverter().ToHsl(((SixLabors.ImageSharp.Color)r[x]).ToPixel<Rgb24>());
+                    float dh = Math.Abs(c.H - 60);
+
+                    r[x] = dh < 20 && c.S >= 0.15f && c.L >= 0.1f ? Black : White;
                 }
             });
     }

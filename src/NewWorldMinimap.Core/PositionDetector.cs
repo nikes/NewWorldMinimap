@@ -50,6 +50,7 @@ namespace NewWorldMinimap.Core
         /// <returns>The found position.</returns>
         public bool TryGetPosition(Image<Rgba32> bmp, out Vector2 position)
         {
+            /*
             bmp.Mutate(x => x
                 .Crop(new Rectangle(bmp.Width - XOffset, YOffset, TextWidth, TextHeight))
                 .Resize(TextWidth * 4, TextHeight * 4)
@@ -58,6 +59,20 @@ namespace NewWorldMinimap.Core
                 .WhiteFilter(0.9f)
                 .Dilate(2)
                 .Pad(TextWidth * 8, TextHeight * 16, Color.White));
+            */
+            string name = Guid.NewGuid().ToString();
+            bmp.SaveAsPng($"a-{name}-0.png");
+
+            bmp.Mutate(x => x
+                .Crop(new Rectangle(bmp.Width - XOffset, YOffset + 2, TextWidth, 16))
+                .Resize(new ResizeOptions()
+                {
+                    Sampler = KnownResamplers.NearestNeighbor,
+                    Size = new Size(TextWidth * 3, 16 * 3),
+                })
+                .HslFilter());
+
+            bmp.SaveAsPng($"a-{name}-1.png");
 
             if (TryGetPositionInternal(bmp, out position))
             {
