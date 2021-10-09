@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Numerics;
 using System.Text.RegularExpressions;
 using NewWorldMinimap.Core.Util;
@@ -28,7 +30,7 @@ namespace NewWorldMinimap.Core
         {
             PageSegmentation = PageSegmentation.Line,
             Numeric = true,
-            Whitelist = "[]0123456789 ,.",
+            Whitelist = "0123456789",
         });
 
         private bool disposedValue;
@@ -50,6 +52,10 @@ namespace NewWorldMinimap.Core
         /// <returns>The found position.</returns>
         public bool TryGetPosition(Image<Rgba32> bmp, out Vector2 position)
         {
+            /*
+            Image<Rgba32> temp = GetString(bmp, 5, 8);
+            //temp.SaveAsPng($"a-{Guid.NewGuid()}.png");
+
             bmp.Mutate(x => x
                 .Crop(new Rectangle(bmp.Width - XOffset, YOffset, TextWidth, TextHeight))
                 .Resize(TextWidth * 4, TextHeight * 4)
@@ -61,6 +67,24 @@ namespace NewWorldMinimap.Core
 
             if (TryGetPositionInternal(bmp, out position))
             {
+                return true;
+            }
+            */
+
+            List<string> results = new List<string>();
+
+            results.Add($"{GetString(bmp, 7, 10)} {GetString(bmp, 12, 14)}");
+            results.Add($"{GetString(bmp, 6, 9)} {GetString(bmp, 11, 13)}");
+            results.Add($"{GetString(bmp, 5, 9)} {GetString(bmp, 11, 13)}");
+            results.Add($"{GetString(bmp, 6, 9)} {GetString(bmp, 11, 13)}");
+            results.Add($"{GetString(bmp, 5, 8)} {GetString(bmp, 10, 12)}");
+            results.Add($"{GetString(bmp, 4, 8)} {GetString(bmp, 10, 12)}");
+
+            string result = results.Where(x => !x.StartsWith(" ") && !x.EndsWith(" ")).OrderByDescending(x => x.Length).FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(result))
+            {
+                string[] parts = result.Split(' ');
+                position = new Vector2(int.Parse(parts[0]), int.Parse(parts[1]));
                 return true;
             }
 
@@ -96,6 +120,80 @@ namespace NewWorldMinimap.Core
 
                 disposedValue = true;
             }
+        }
+
+        private const int Characters = 33;
+        private const int CharHeight = 14;
+        private const int CharWidth = 9;
+        private const int Scale = 4;
+
+        /// <summary>
+        /// Tries to get the position from the provided image.
+        /// </summary>
+        /// <param name="bmp">The image.</param>
+        /// <param name="position">The position.</param>
+        /// <returns>The found position.</returns>
+        private Image<Rgba32> GetString(Image<Rgba32> img)
+        {
+            Image<Rgba32> combined = new Image<Rgba32>(Characters * CharWidth * Scale, CharHeight * Scale);
+            combined.Mutate(c =>
+            {
+                c.BackgroundColor(Color.White);
+
+                for (int i = 5; i <= 8; i++)
+                {
+                    using Image<Rgba32> charImg = GetChar(img, i);
+                    c.DrawImage(charImg, new Point(CharWidth * Scale * i), 0, 1);
+                }
+            });
+
+            return combined;
+        }
+
+        private string? GetString(Image<Rgba32> img, int startIndex, int endIndex)
+        {
+            int length = endIndex - startIndex + 1;
+
+            Image<Rgba32> result = new Image<Rgba32>(length * CharWidth * Scale, CharHeight * Scale);
+
+            result.Mutate(c =>
+            {
+                c.BackgroundColor(Color.White);
+
+                for (int i = 0; i < length; i++)
+                {
+                    using Image<Rgba32> charImg = GetChar(img, i + startIndex);
+                    c.DrawImage(charImg, CharWidth * Scale * i, 0);
+                }
+            });
+
+            Image<Rgba32> temp = result.Clone(c => c.Pad(result.Width * 3, result.Height * 3, Color.White));
+            string read = tesseract.Read(temp).Trim();
+            temp.SaveAsPng($"a-{read}.png");
+
+            if (read.Length != length)
+            {
+                return null;
+            }
+
+            return read;
+        }
+
+        private Image<Rgba32> GetChar(Image<Rgba32> img, int index)
+        {
+            int invertedIndex = Characters - index;
+            int y = 21;
+
+            int x = img.Width - 4 - (CharWidth * invertedIndex);
+
+            Image<Rgba32> cimg = img.Clone(c => c
+                .Crop(new Rectangle(x, y, CharWidth, CharHeight))
+                .Resize(CharWidth * Scale, CharHeight * Scale)
+                .HistogramEqualization()
+                .WhiteFilter(0.8f)
+                .Dilate(1));
+
+            return cimg;
         }
 
         private bool TryGetPositionInternal(Image<Rgba32> bmp, out Vector2 position)
