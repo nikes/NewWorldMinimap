@@ -73,18 +73,29 @@ namespace NewWorldMinimap.Core
 
             List<string> results = new List<string>();
 
-            results.Add($"{GetString(bmp, 7, 10)} {GetString(bmp, 12, 14)}");
-            results.Add($"{GetString(bmp, 6, 9)} {GetString(bmp, 11, 13)}");
-            results.Add($"{GetString(bmp, 5, 9)} {GetString(bmp, 11, 13)}");
-            results.Add($"{GetString(bmp, 6, 9)} {GetString(bmp, 11, 13)}");
-            results.Add($"{GetString(bmp, 5, 8)} {GetString(bmp, 10, 12)}");
-            results.Add($"{GetString(bmp, 4, 8)} {GetString(bmp, 10, 12)}");
+            results.Add($"{GetString(bmp, 7, 10)} {GetString(bmp, 17, 19)}");
+            results.Add($"{GetString(bmp, 6, 9)} {GetString(bmp, 16, 19)}");
+            results.Add($"{GetString(bmp, 5, 9)} {GetString(bmp, 16, 19)}");
+            results.Add($"{GetString(bmp, 6, 9)} {GetString(bmp, 16, 18)}");
+            results.Add($"{GetString(bmp, 5, 8)} {GetString(bmp, 15, 18)}");
+            results.Add($"{GetString(bmp, 4, 8)} {GetString(bmp, 15, 18)}");
 
             string result = results.Where(x => !x.StartsWith(" ") && !x.EndsWith(" ")).OrderByDescending(x => x.Length).FirstOrDefault();
             if (!string.IsNullOrWhiteSpace(result))
             {
                 string[] parts = result.Split(' ');
-                position = new Vector2(int.Parse(parts[0]), int.Parse(parts[1]));
+                float x = float.Parse(parts[0], CultureInfo.InvariantCulture);
+                float y = float.Parse(parts[1], CultureInfo.InvariantCulture);
+
+                x %= 100000;
+
+                while (x > 14260)
+                {
+                    x -= 10000;
+                }
+
+                y %= 10000;
+                position = new Vector2(x, y);
                 return true;
             }
 

@@ -128,6 +128,6 @@ namespace NewWorldMinimap.TestBench
         /// <summary>
         /// Gets a value indicating whether the result was correct.
         /// </summary>
-        public bool Success => Found == Expected;
+        public bool Success => (int)Found.X == (int)Expected.X && (int)Found.Y == (int)Expected.Y;
     }
 }
