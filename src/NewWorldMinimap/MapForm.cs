@@ -11,7 +11,8 @@ using System.Threading;
 using System.Windows.Forms;
 using System.Windows.Input;
 using NewWorldMinimap.Caches;
-using NewWorldMinimap.Core;
+using NewWorldMinimap.Core.PositionDetector;
+using NewWorldMinimap.Core.PositionProvider;
 using NewWorldMinimap.Core.Util;
 using NewWorldMinimap.Util;
 using NonInvasiveKeyboardHookLibrary;
@@ -27,7 +28,7 @@ namespace NewWorldMinimap
     /// <seealso cref="Form" />
     public class MapForm : Form
     {
-        private readonly PositionDetector pd = new PositionDetector();
+        private IPositionProvider _positionProvider;
         private readonly PictureBox picture = new PictureBox();
         private readonly MapImageCache map = new MapImageCache();
         private readonly MarkerCache markers = new MarkerCache();
@@ -57,8 +58,9 @@ namespace NewWorldMinimap
             alwaysOnTopButton = new MenuItem("Always-on-top", ToggleAlwaysOnTop, Shortcut.None);
             debugButton = new MenuItem("Debug", ToggleDebug, Shortcut.None);
             debugEnabled = false;
-
+            
             InitializeComponent();
+            InitializePositionProvider(currentScreen);
             StartUpdateLoop();
         }
 
@@ -73,6 +75,14 @@ namespace NewWorldMinimap
             string name = $"CptWesley's Minimap {pos.ToString("0.000", CultureInfo.InvariantCulture)}";
             this.Name = name;
             this.Text = name;
+        }
+
+        private void InitializePositionProvider(int screen)
+        {
+            var screenRect = ScreenGrabber.GetScreenRect(screen);
+            var imageSource = new Screenshotter(screenRect);
+            var positionDetector = new ImageTesseractPositionDetector(imageSource);
+            _positionProvider = new SimpleThreadedPositionProvider(positionDetector);
         }
 
         private void InitializeComponent()
@@ -245,7 +255,7 @@ namespace NewWorldMinimap
             {
                 sw.Restart();
 
-                if (pd.TryGetPosition(ScreenGrabber.TakeScreenshot(currentScreen), out Vector2 pos, this.debugEnabled, out Image<Rgba32> debugImage))
+                if (_positionProvider.GetPosition(out Vector2 pos))
                 {
                     Vector2 posDifference = pos - lastPos;
 
