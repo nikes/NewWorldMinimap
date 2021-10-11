@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Serilog;
+using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Runtime.InteropServices;
@@ -14,6 +15,7 @@ namespace NewWorldMinimap
         /// <summary>
         /// Defines the entry point of the application.
         /// </summary>
+        /// <param name="args">The arguments.</param>
         [STAThread]
         [SuppressMessage("Security", "CA5386:Avoid hardcoding SecurityProtocolType value", Justification = "See comment below.")]
         public static void Main()
@@ -29,6 +31,12 @@ namespace NewWorldMinimap
             ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
 
             NativeMethods.SetProcessDPIAware();
+           
+            using var log = new LoggerConfiguration()
+                .WriteTo.Console()
+                .CreateLogger();
+            Log.Logger = log;
+
             Application.EnableVisualStyles();
             using Form map = new MapForm();
             Application.Run(map);
