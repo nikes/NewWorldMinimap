@@ -149,10 +149,9 @@ namespace NewWorldMinimap
                 screenItems.Add(item);
             }
 
-            CreateRefreshMenuItem(0);
-            CreateRefreshMenuItem(200);
-            CreateRefreshMenuItem(350);
-            CreateRefreshMenuItem(1000);
+            CreateRefreshMenuItem(30);
+            CreateRefreshMenuItem(60);
+            CreateRefreshMenuItem(90);
 
             menu.MenuItems.Add(alwaysOnTopButton);
             menu.MenuItems.Add("-");
@@ -163,7 +162,7 @@ namespace NewWorldMinimap
             menu.MenuItems.Add(debugButton);
 
             SelectScreen(ScreenGrabber.GetPrimaryScreenIndex());
-            SelectRefreshDelay(2, 350);
+            SelectRefreshDelay(1, 60);
         }
 
         private void CreateRefreshMenuItem(int delay)
