@@ -5,6 +5,7 @@ using System.Windows.Forms;
 using NewWorldMinimap.Core.Util;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
+using Point = SixLabors.ImageSharp.Point;
 using Rectangle = SixLabors.ImageSharp.Rectangle;
 
 namespace NewWorldMinimap.Util
@@ -25,17 +26,18 @@ namespace NewWorldMinimap.Util
         /// </summary>
         /// <param name="screenIndex">Index of the screen.</param>
         /// <returns>The taken screenshot.</returns>
-        public static Image<Rgba32> TakeScreenshot(int screenIndex = 0)
+        public static Image<Rgba32> TakeScreenshot(int width, int height, Point offset, int screenIndex = 0)
         {
             Screen[] screens = Screen.AllScreens;
             Screen screen = screenIndex >= 0 && screenIndex < screens.Length ? screens[screenIndex] : Screen.PrimaryScreen;
 
             var rect = User32.GetActiveWindowRect();
-            var bounds = new Rectangle(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
-            using Bitmap bmp = new(bounds.Width, bounds.Height, PixelFormat.Format32bppRgb);
+            var zone = new Rectangle(rect.Right - offset.X, rect.Top + offset.Y, width, height);
+            
+            using Bitmap bmp = new(zone.Width, zone.Height, PixelFormat.Format32bppRgb);
             using (Graphics g = Graphics.FromImage(bmp))
             {
-                g.CopyFromScreen(bounds.Left, bounds.Top, 0, 0, screen.Bounds.Size, CopyPixelOperation.SourceCopy);
+                g.CopyFromScreen(zone.Left, zone.Top, 0, 0, screen.Bounds.Size, CopyPixelOperation.SourceCopy);
             }
 
             return bmp.ToImageSharp();

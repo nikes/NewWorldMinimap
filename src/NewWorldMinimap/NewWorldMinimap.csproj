@@ -26,7 +26,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Newtonsoft.Json" Version="13.0.1"/>
+        <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
         <PackageReference Include="BackwardsCompatibleRecords" Version="1.0.0">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>compile</IncludeAssets>
@@ -38,23 +38,23 @@
         <PackageReference Include="Costura.Fody" Version="5.6.0">
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
-        <PackageReference Include="SixLabors.ImageSharp" Version="1.0.4"/>
+        <PackageReference Include="SixLabors.ImageSharp" Version="1.0.4" />
         <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.354">
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
-        <PackageReference Include="TesserNet.ImageSharp" Version="0.5.1"/>
+        <PackageReference Include="TesserNet.ImageSharp" Version="0.5.1" />
     </ItemGroup>
 
     <ItemGroup>
-        <Reference Include="System.Windows.Forms"/>
+        <Reference Include="System.Windows.Forms" />
     </ItemGroup>
 
     <ItemGroup>
-        <EmbeddedResource Include="Resources/**"/>
-        <AdditionalFiles Include="../stylecop.json" Link="stylecop.json"/>
+        <EmbeddedResource Include="Resources/**" />
+        <AdditionalFiles Include="../stylecop.json" Link="stylecop.json" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\NewWorldMinimap.Core\NewWorldMinimap.Core.csproj"/>
+        <ProjectReference Include="..\NewWorldMinimap.Core\NewWorldMinimap.Core.csproj" />
     </ItemGroup>
 </Project>

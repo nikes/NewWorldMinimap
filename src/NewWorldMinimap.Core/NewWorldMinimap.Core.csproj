@@ -15,15 +15,16 @@
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>compile</IncludeAssets>
         </PackageReference>
-        <PackageReference Include="Newtonsoft.Json" Version="13.0.1"/>
-        <PackageReference Include="SixLabors.ImageSharp" Version="1.0.4"/>
+        <PackageReference Include="IronOcr" Version="2021.9.0" />
+        <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
+        <PackageReference Include="SixLabors.ImageSharp" Version="1.0.4" />
         <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.354">
             <PrivateAssets>all</PrivateAssets>
         </PackageReference>
-        <PackageReference Include="TesserNet.ImageSharp" Version="0.5.1"/>
+        <PackageReference Include="TesserNet.ImageSharp" Version="0.5.1" />
     </ItemGroup>
 
     <ItemGroup>
-        <AdditionalFiles Include="../stylecop.json" Link="stylecop.json"/>
+        <AdditionalFiles Include="../stylecop.json" Link="stylecop.json" />
     </ItemGroup>
 </Project>

@@ -15,6 +15,7 @@ using NewWorldMinimap.Util;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
+using Point = SixLabors.ImageSharp.Point;
 
 namespace NewWorldMinimap
 {
@@ -24,16 +25,16 @@ namespace NewWorldMinimap
     /// <seealso cref="Form" />
     public class MapForm : Form
     {
-        private readonly PositionDetector pd = new PositionDetector();
-        private readonly PictureBox picture = new PictureBox();
-        private readonly MapImageCache map = new MapImageCache(4);
-        private readonly MarkerCache markers = new MarkerCache();
-        private readonly IconCache icons = new IconCache();
+        private readonly PositionDetector pd = new();
+        private readonly PictureBox picture = new();
+        private readonly MapImageCache map = new(4);
+        private readonly MarkerCache markers = new();
+        private readonly IconCache icons = new();
 
-        private readonly ContextMenu menu = new ContextMenu();
+        private readonly ContextMenu menu = new();
         private readonly MenuItem alwaysOnTopButton;
-        private readonly List<MenuItem> screenItems = new List<MenuItem>();
-        private readonly List<MenuItem> refreshDelayItems = new List<MenuItem>();
+        private readonly List<MenuItem> screenItems = new();
+        private readonly List<MenuItem> refreshDelayItems = new();
         private readonly MenuItem windowModeButton;
         private readonly MenuItem debugButton;
 
@@ -52,7 +53,6 @@ namespace NewWorldMinimap
             alwaysOnTopButton = new MenuItem("Always-on-top", ToggleAlwaysOnTop, Shortcut.None);
             windowModeButton = new MenuItem("Windowed Mode", ToggleWindowMode, Shortcut.None);
             debugButton = new MenuItem("Debug", ToggleDebug, Shortcut.None);
-            debugEnabled = false;
 
             InitializeComponent();
             StartUpdateLoop();
@@ -226,63 +226,83 @@ namespace NewWorldMinimap
                     continue;
                 }
 
-                var screenshot = ScreenGrabber.TakeScreenshot(currentScreen);
-                if (pd.TryGetPosition(screenshot, windowMode, out Vector2 pos, debugEnabled, out Image<Rgba32> debugImage))
+                try
                 {
-                    using Image<Rgba32> baseMap = map.GetTileForCoordinate(pos.X, pos.Y);
-
-                    var (imageX, imageY) = map.ToMinimapCoordinate(pos.X, pos.Y, pos.X, pos.Y);
-
-                    var (tileX, tileY) = MapImageCache.GetTileCoordinatesForCoordinate(pos.X, pos.Y);
-                    IEnumerable<Marker> visibleMarkers = markers.Get(tileX, tileY);
-
-                    var pos1 = lastPos;
-                    baseMap.Mutate(c =>
+                    Point offset = new(Const.XOffset, windowMode ? Const.YOffset + Const.YWindowOffset : Const.YOffset);
+                    var screenshot = ScreenGrabber.TakeScreenshot(Const.TextWidth, Const.TextHeight, offset, currentScreen);
+                    var exist = pd.TryGetPosition(screenshot, out Vector2 pos, debugEnabled,
+                        out Image<Rgba32> debugImage);
+                    if (exist)
                     {
-                        using Image<Rgba32> playerTriangle = icons.Get("player").Clone();
-                        AffineTransformBuilder builder = new();
-                        var posDifference = pos - pos1;
-
-                        if (posDifference != Vector2.Zero)
+                        var distance = Math.Sqrt(Math.Pow(pos.X - lastPos.X, 2) + Math.Pow(pos.Y - lastPos.Y, 2));
+                        if (distance > 1000)
                         {
-                            rotationAngle = Math.Atan2(posDifference.X, posDifference.Y);
+                            Console.WriteLine("Failure, max distance");
+                            lastPos = pos;
+                            continue;
                         }
 
-                        builder.AppendRotationRadians((float)rotationAngle);
-                        playerTriangle.Mutate(x => x.Transform(builder));
-                        c.DrawImage(playerTriangle, imageX, imageY);
+                        using Image<Rgba32> baseMap = map.GetTileForCoordinate(pos.X, pos.Y);
 
-                        foreach (Marker marker in visibleMarkers)
+                        var (imageX, imageY) = map.ToMinimapCoordinate(pos.X, pos.Y, pos.X, pos.Y);
+
+                        var (tileX, tileY) = MapImageCache.GetTileCoordinatesForCoordinate(pos.X, pos.Y);
+                        IEnumerable<Marker> visibleMarkers = markers.Get(tileX, tileY);
+
+                        var pos1 = lastPos;
+                        baseMap.Mutate(c =>
                         {
-                            var (ix, iy) = map.ToMinimapCoordinate(pos.X, pos.Y, marker.X, marker.Y);
-                            c.DrawImage(icons.Get(marker), ix, iy);
-                        }
+                            using Image<Rgba32> playerTriangle = icons.Get("player").Clone();
+                            AffineTransformBuilder builder = new();
+                            var posDifference = pos - pos1;
 
-                        if (debugImage != null)
+                            if (posDifference != Vector2.Zero)
+                            {
+                                rotationAngle = Math.Atan2(posDifference.X, posDifference.Y);
+                            }
+
+                            builder.AppendRotationRadians((float)rotationAngle);
+                            playerTriangle.Mutate(x => x.Transform(builder));
+                            c.DrawImage(playerTriangle, imageX, imageY);
+
+                            foreach (Marker marker in visibleMarkers)
+                            {
+                                var (ix, iy) = map.ToMinimapCoordinate(pos.X, pos.Y, marker.X, marker.Y);
+                                c.DrawImage(icons.Get(marker), ix, iy);
+                            }
+                            
+                            if (debugEnabled)
+                            {
+                                // debugImage.Mutate(x => x.Resize(debugImage.Width, debugImage.Height));
+                                c.DrawImage(debugImage, imageX - (this.Width / 2), imageY - (this.Height / 2));
+                                debugImage.Dispose();
+                            }
+                        });
+                        
+                        using Image<Rgba32> newMap = baseMap.Recenter(imageX, imageY);
+                        System.Drawing.Image prev = picture.Image;
+                        
+                        SafeInvoke(() =>
                         {
-                            debugImage.Mutate(x => x.Resize(debugImage.Width / 2, debugImage.Height / 2));
-                            c.DrawImage(debugImage, imageX - (this.Width / 2), imageY - (this.Height / 2));
-                            debugImage.Dispose();
-                        }
-                    });
+                            SetName(pos);
+                            picture.Image = newMap.ToBitmap();
+                            UpdateSize();
+                        });
 
-                    using Image<Rgba32> newMap = baseMap.Recenter(imageX, imageY);
-                    System.Drawing.Image prev = picture.Image;
+                        prev?.Dispose();
 
-                    SafeInvoke(() =>
+                        lastPos = pos;
+                    }
+                    else
                     {
-                        SetName(pos);
-                        picture.Image = newMap.ToBitmap();
-                        UpdateSize();
-                    });
-
-                    prev?.Dispose();
-
-                    lastPos = pos;
+                        Console.WriteLine($"{i}: Failure");
+                        
+                        debugImage.SaveAsJpeg("screenshot-debug.jpg");
+                    }
                 }
-                else
+                catch (Exception e)
                 {
-                    Console.WriteLine($"{i}: Failure");
+                    Console.WriteLine($"[ERROR][Loop] ${e.Message}");
                 }
 
                 i++;

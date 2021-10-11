@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Png;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
@@ -92,7 +93,17 @@ namespace NewWorldMinimap.Caches
 
             if (File.Exists(fileName))
             {
-                result = Image.Load<Rgba32>(fileName);
+                try
+                {
+                    result = Image.Load<Rgba32>(fileName, new PngDecoder());
+                }
+                catch (Exception)
+                {
+                    result = Request(x, y);
+                    Directory.CreateDirectory("./maps/");
+                    result.Save(fileName);
+                    Console.WriteLine($"GetChunk: {name}");
+                }
             }
             else
             {
