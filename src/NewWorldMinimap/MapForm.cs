@@ -29,6 +29,13 @@ namespace NewWorldMinimap
     /// <seealso cref="Form" />
     public class MapForm : Form
     {
+        private enum PositionDetectors
+        {
+            ColorFilter,
+            Original,
+        }
+
+        private PositionDetectors ActivePositionDetector = PositionDetectors.ColorFilter;
         private IPositionProvider _positionProvider;
         private readonly PictureBox picture = new PictureBox();
         private readonly MapImageCache map = new MapImageCache();
@@ -40,6 +47,7 @@ namespace NewWorldMinimap
         private readonly MenuItem alwaysOnTopButton;
         private readonly List<MenuItem> screenItems = new List<MenuItem>();
         private readonly List<MenuItem> refreshDelayItems = new List<MenuItem>();
+        private readonly List<MenuItem> _menuPositionSource = new List<MenuItem>();
         private readonly MenuItem debugButton;
 
         private int currentScreen;
@@ -61,7 +69,7 @@ namespace NewWorldMinimap
             debugEnabled = false;
             
             InitializeComponent();
-            InitializePositionProvider(currentScreen);
+            UpdatePositionProvider();
             StartUpdateLoop();
         }
 
@@ -78,12 +86,39 @@ namespace NewWorldMinimap
             this.Text = name;
         }
 
-        private void InitializePositionProvider(int screen)
+        private IPositionDetector GetPositionDetector()
         {
-            var screenRect = ScreenGrabber.GetScreenRect(screen);
+            var screenRect = ScreenGrabber.GetScreenRect(currentScreen);
             var imageSource = new Screenshotter(screenRect);
-            var positionDetector = new ImageTesseractCFPositionDetector(imageSource);
-            _positionProvider = new PredictingThreadedPositionProvider(positionDetector);
+            if (ActivePositionDetector == PositionDetectors.ColorFilter)
+            {
+                return new ImageTesseractCFPositionDetector(imageSource, debugEnabled);
+            }
+
+            if (ActivePositionDetector == PositionDetectors.Original)
+            {
+                return new ImageTesseractOriginalPositionDetector(imageSource, debugEnabled);
+            }
+
+            return null;
+        }
+
+        private void UpdatePositionProvider()
+        {
+            var positionDetector = GetPositionDetector();
+            if (positionDetector == null)
+            {
+                Log.Warning("Could not get position detector");
+                return;
+            }
+
+            if (_positionProvider == null)
+            {
+                _positionProvider = new PredictingThreadedPositionProvider(positionDetector);
+            } else
+            {
+                _positionProvider.SetPositionDetector(positionDetector);
+            }
         }
 
         private void InitializeComponent()
@@ -138,6 +173,18 @@ namespace NewWorldMinimap
             }
         }
 
+        private void SetDetectorSource(int index, PositionDetectors detector)
+        {
+            ActivePositionDetector = detector;
+            foreach (MenuItem mi in _menuPositionSource)
+            {
+                mi.Checked = false;
+            }
+
+            _menuPositionSource[index].Checked = true;
+            UpdatePositionProvider();
+        }
+
         private void BuildMenu()
         {
             this.ContextMenu = menu;
@@ -150,6 +197,20 @@ namespace NewWorldMinimap
                 screenItems.Add(item);
             }
 
+            var detectors = (PositionDetectors[])Enum.GetValues(typeof(PositionDetectors));
+            for (int i = 0;  i < detectors.Length; i++)
+            {
+                var detector = detectors[i];
+                var localI = i;
+                MenuItem item = new MenuItem($"Position Source: {detector}", (s, e) => SetDetectorSource(localI, detector), Shortcut.None);
+                if (detector == ActivePositionDetector)
+                {
+                    item.Checked = true;
+                }
+
+                _menuPositionSource.Add(item);
+            }
+
             CreateRefreshMenuItem(30);
             CreateRefreshMenuItem(60);
             CreateRefreshMenuItem(90);
@@ -160,7 +221,9 @@ namespace NewWorldMinimap
             menu.MenuItems.Add("-");
             menu.MenuItems.AddRange(refreshDelayItems.ToArray());
             menu.MenuItems.Add("-");
-            menu.MenuItems.Add(debugButton);
+            menu.MenuItems.AddRange(_menuPositionSource.ToArray());
+            //menu.MenuItems.Add("-");
+            //menu.MenuItems.Add(debugButton);
 
             SelectScreen(ScreenGrabber.GetPrimaryScreenIndex());
             SelectRefreshDelay(1, 60);
@@ -177,6 +240,7 @@ namespace NewWorldMinimap
             screenItems[currentScreen].Checked = false;
             currentScreen = index;
             screenItems[index].Checked = true;
+            UpdatePositionProvider();
         }
 
         private void SelectRefreshDelay(int index, int delay)
@@ -217,6 +281,8 @@ namespace NewWorldMinimap
                 debugButton.Checked = true;
                 this.debugEnabled = true;
             }
+
+            UpdatePositionProvider();
         }
 
         private void UpdateSize()
@@ -258,7 +324,6 @@ namespace NewWorldMinimap
                 if (_positionProvider.TryGetPosition(out Vector2 pos))
                 {
                     Redraw(pos, _positionProvider.ActorAngle);
-                    lastPos = pos;
                 }
                 else
                 {
