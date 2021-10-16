@@ -61,8 +61,6 @@ namespace NewWorldMinimap
         private int currentScreen;
         private int refreshDelay = 60;
         private bool debugEnabled;
-        private Vector2 lastPos = Vector2.Zero;
-        private double rotationAngle;
         private bool overlayMode;
 
         private Thread? scannerThread;
@@ -310,7 +308,10 @@ namespace NewWorldMinimap
                     Log.Debug("Read Failure");
                 }
 
-                DrawDebugImage(debugImage);
+                if (_positionProvider.DebugImage != null)
+                {
+                    DrawDebugImage(_positionProvider.DebugImage);
+                }
 
                 i++;
 
