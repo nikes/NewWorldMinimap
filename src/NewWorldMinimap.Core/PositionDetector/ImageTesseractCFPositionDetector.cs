@@ -17,10 +17,6 @@ namespace NewWorldMinimap.Core.PositionDetector
     /// <seealso cref="IDisposable" />
     public class ImageTesseractCFPositionDetector : IDisposable, IPositionDetector
     {
-        private const int XOffset = 277;
-        private const int YOffset = 18;
-        private const int TextWidth = XOffset;
-        private const int TextHeight = YOffset;
         private static Vector4 textColor = (Vector4)Color.FromRgb(220, 220, 160);
 
         private static readonly Regex PosRegex = new Regex(@"(\d+ \d+) (\d+ \d+)", RegexOptions.Compiled);
@@ -64,8 +60,7 @@ namespace NewWorldMinimap.Core.PositionDetector
             var bmp = ImageSource.GetImage();
 
             bmp.Mutate(x => x
-                .Crop(new Rectangle(bmp.Width - XOffset, YOffset, TextWidth, TextHeight))
-                .Resize(TextWidth * 4, TextHeight * 4)
+                .Resize(bmp.Width * 4, bmp.Height * 4)
                 .ColorFilter(textColor)
             );
             result.DebugImage = DebugEnabled ? bmp.Clone() : null!;

@@ -21,6 +21,7 @@ using Serilog;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
+using Rectangle = System.Drawing.Rectangle;
 
 namespace NewWorldMinimap
 {
@@ -35,6 +36,11 @@ namespace NewWorldMinimap
             ColorFilter,
             Original,
         }
+
+        private const int XOffset = 277;
+        private const int YOffset = 18;
+        private const int TextWidth = XOffset;
+        private const int TextHeight = YOffset;
 
         private PositionDetectors ActivePositionDetector = PositionDetectors.ColorFilter;
         private IPositionProvider _positionProvider;
@@ -91,7 +97,8 @@ namespace NewWorldMinimap
         private IPositionDetector GetPositionDetector()
         {
             var screenRect = ScreenGrabber.GetScreenRect(currentScreen);
-            var imageSource = new Screenshotter(screenRect);
+            var coordsRect = new Rectangle(screenRect.Width - XOffset, YOffset, TextWidth, TextHeight);
+            var imageSource = new Screenshotter(coordsRect);
 
             if (ActivePositionDetector == PositionDetectors.ColorFilter)
             {

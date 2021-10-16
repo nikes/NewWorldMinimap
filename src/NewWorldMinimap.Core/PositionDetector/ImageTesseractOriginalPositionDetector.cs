@@ -17,10 +17,6 @@ namespace NewWorldMinimap.Core.PositionDetector
     /// <seealso cref="IDisposable" />
     public class ImageTesseractOriginalPositionDetector : IDisposable, IPositionDetector
     {
-        private const int XOffset = 277;
-        private const int YOffset = 18;
-        private const int TextWidth = 277;
-        private const int TextHeight = 18;
         private const int MaxCounter = 5;
 
         private bool disposedValue;
@@ -67,17 +63,19 @@ namespace NewWorldMinimap.Core.PositionDetector
             {
                 throw new ArgumentNullException(nameof(bmp));
             }
+            var textWidth = bmp.Width;
+            var textHeight = bmp.Height;
+            bmp.Mutate(x => x
+                .Resize(textWidth * 4, textHeight * 4));
+
+            debugImage = debugEnabled ? bmp.Clone() : null!;
 
             bmp.Mutate(x => x
-                .Crop(new Rectangle(bmp.Width - XOffset, YOffset, TextWidth, TextHeight))
-                .Resize(TextWidth * 4, TextHeight * 4));
-            debugImage = debugEnabled ? bmp.Clone() : null!;
-            bmp.Mutate(x => x
                 .HistogramEqualization()
-                .Crop(new Rectangle(0, 2 * 4, TextWidth * 4, 16 * 4))
+                .Crop(new Rectangle(0, 2 * 4, textWidth * 4, 16 * 4))
                 .WhiteFilter(0.9f)
                 .Dilate(2)
-                .Pad(TextWidth * 8, TextHeight * 16, Color.White));
+                .Pad(textWidth * 8, textHeight * 16, Color.White));
 
             if (TryGetPositionInternal(bmp, out position))
             {
