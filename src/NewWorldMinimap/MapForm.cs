@@ -44,7 +44,7 @@ namespace NewWorldMinimap
 
         private PositionDetectors ActivePositionDetector = PositionDetectors.ColorFilter;
         private IPositionProvider _positionProvider;
-        private readonly PictureBox picture = new PictureBox();
+        private readonly MapControl picture = new MapControl();
         private readonly MapImageCache map = new MapImageCache();
         private readonly MarkerCache markers = new MarkerCache();
         private readonly IconCache icons = new IconCache();
