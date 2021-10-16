@@ -52,6 +52,7 @@ namespace NewWorldMinimap
 
         private readonly ContextMenu menu = new ContextMenu();
         private readonly MenuItem alwaysOnTopButton;
+        private readonly MenuItem circularModeButton;
         private readonly List<MenuItem> screenItems = new List<MenuItem>();
         private readonly MenuGroupHandler _menuRefreshDelay = new MenuGroupHandler();
         private readonly MenuGroupHandler _menuPositionSource = new MenuGroupHandler();
@@ -71,6 +72,7 @@ namespace NewWorldMinimap
         public MapForm()
         {
             alwaysOnTopButton = new MenuItem("Always-on-top", ToggleAlwaysOnTop, Shortcut.None);
+            circularModeButton = new MenuItem("Circle Shape", ToggleShape, Shortcut.None);
             debugButton = new MenuItem("Debug", ToggleDebug, Shortcut.None);
             debugEnabled = false;
             
@@ -151,34 +153,50 @@ namespace NewWorldMinimap
         private void SetupHotkeys()
         {
             khm.RegisterHotkey(NonInvasiveKeyboardHookLibrary.ModifierKeys.Control, KeyInterop.VirtualKeyFromKey(Key.D), ToggleInteractivity);
+            khm.RegisterHotkey(NonInvasiveKeyboardHookLibrary.ModifierKeys.Control, KeyInterop.VirtualKeyFromKey(Key.S), ToggleVisibility);
         }
 
         private void ToggleInteractivity()
         {
-            overlayMode = !overlayMode;
-
-            if (overlayMode)
+            if (!this.Visible)
             {
-                SafeInvoke(() =>
+                return;
+            }
+
+            overlayMode = !overlayMode;
+            SafeInvoke(() =>
+            {
+                this.TransparencyKey = System.Drawing.Color.Empty;
+
+                if (overlayMode)
                 {
                     this.TopMost = true;
                     this.FormBorderStyle = FormBorderStyle.None;
+                    this.TransparencyKey = BackColor;
+
                     int style = (int)NativeMethods.GetWindowLongPtr(this.Handle, -20);
                     int newStyle = style | 0x80000 | 0x20;
                     NativeMethods.SetWindowLongPtr(this.Handle, -20, new IntPtr(newStyle));
-                });
-            }
-            else
-            {
-                SafeInvoke(() =>
+                }
+                else
                 {
                     this.TopMost = alwaysOnTopButton.Checked;
                     this.FormBorderStyle = FormBorderStyle.Sizable;
                     int style = (int)NativeMethods.GetWindowLongPtr(this.Handle, -20);
                     int newStyle = style & ~0x80000 & ~0x20;
                     NativeMethods.SetWindowLongPtr(this.Handle, -20, new IntPtr(newStyle));
-                });
-            }
+                }
+
+                if (!overlayMode && picture.IsCircular)
+                {
+                    this.TransparencyKey = BackColor;
+                }
+            });
+        }
+
+        private void ToggleVisibility()
+        {
+            SafeInvoke(() => this.Visible = !this.Visible);
         }
 
         private void SetDetectorSource(PositionDetectors detector)
@@ -213,6 +231,7 @@ namespace NewWorldMinimap
             }
 
             menu.MenuItems.Add(alwaysOnTopButton);
+            menu.MenuItems.Add(circularModeButton);
             menu.MenuItems.Add("-");
             menu.MenuItems.AddRange(screenItems.ToArray());
             _menuRefreshDelay.CreateMenu(menu.MenuItems);
@@ -245,6 +264,25 @@ namespace NewWorldMinimap
                 alwaysOnTopButton.Checked = true;
                 this.TopMost = true;
             }
+        }
+
+        private void ToggleShape(object sender, EventArgs e)
+        {
+            circularModeButton.Checked = !circularModeButton.Checked;
+            SafeInvoke(() =>
+            {
+                if (circularModeButton.Checked)
+                {
+                    picture.IsCircular = true;
+                }
+                else
+                {
+                    picture.IsCircular = false;
+                }
+
+                this.TransparencyKey = System.Drawing.Color.Empty;
+                this.TransparencyKey = BackColor;
+            });
         }
 
         private void ToggleDebug(object sender, EventArgs e)
@@ -298,8 +336,9 @@ namespace NewWorldMinimap
             while (true)
             {
                 sw.Restart();
-
-                if (_positionProvider.TryGetPosition(out Vector2 pos))
+                if (Visible && WindowState != FormWindowState.Minimized)
+                {
+                    if (_positionProvider.TryGetPosition(out Vector2 pos))
                 {
                     Redraw(pos, _positionProvider.ActorAngle);
                 }
@@ -313,7 +352,8 @@ namespace NewWorldMinimap
                     DrawDebugImage(_positionProvider.DebugImage);
                 }
 
-                i++;
+                    i++;
+                }
 
                 sw.Stop();
                 long elapsed = sw.ElapsedMilliseconds;
