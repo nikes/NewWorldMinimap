@@ -156,7 +156,7 @@ namespace NewWorldMinimap
         private void SetupHotkeys()
         {
             khm.RegisterHotkey(NonInvasiveKeyboardHookLibrary.ModifierKeys.Control, KeyInterop.VirtualKeyFromKey(Key.D), ToggleInteractivity);
-            khm.RegisterHotkey(NonInvasiveKeyboardHookLibrary.ModifierKeys.Control, KeyInterop.VirtualKeyFromKey(Key.S), ToggleVisibility);
+            khm.RegisterHotkey(NonInvasiveKeyboardHookLibrary.ModifierKeys.Control | NonInvasiveKeyboardHookLibrary.ModifierKeys.Alt, KeyInterop.VirtualKeyFromKey(Key.S), ToggleVisibility);
         }
 
         private void ToggleInteractivity()
