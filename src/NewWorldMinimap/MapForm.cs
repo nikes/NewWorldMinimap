@@ -64,6 +64,9 @@ namespace NewWorldMinimap
         private bool debugEnabled;
         private bool overlayMode;
 
+        private float markerScale = 1.5f;
+        private float mapScale = 1f;
+
         private Thread? scannerThread;
 
         /// <summary>
@@ -367,30 +370,37 @@ namespace NewWorldMinimap
 
         private void Redraw(Vector2 pos, double rotationAngle)
         {
-            using Image<Rgba32> baseMap = map.GetTileForCoordinate(pos.X, pos.Y, picture.Width, picture.Height);
+            int pW = (int)(picture.Width * mapScale);
+            int pH = (int)(picture.Height * mapScale);
 
-            (int imageX, int imageY) = MapImageCache.ToMinimapCoordinate(pos.X, pos.Y, pos.X, pos.Y, picture.Width, picture.Height);
+            using Image<Rgba32> baseMap = map.GetTileForCoordinate(pos.X, pos.Y, pW, pH);
+
+            (int imageX, int imageY) = MapImageCache.ToMinimapCoordinate(pos.X, pos.Y, pos.X, pos.Y, pW, pH);
 
             (int tileX, int tileY) = MapImageCache.GetTileCoordinatesForCoordinate(pos.X, pos.Y);
-            IEnumerable<Marker> visibleMarkers = markers.Get(tileX, tileY, picture.Width, picture.Height);
+            IEnumerable<Marker> visibleMarkers = markers.Get(tileX, tileY, pW, pH);
 
             baseMap.Mutate(c =>
             {
+                
+                foreach (Marker marker in visibleMarkers)
+                {
+                    (int ix, int iy) = MapImageCache.ToMinimapCoordinate(pos.X, pos.Y, marker.X, marker.Y, picture.Width, picture.Height);
+                    var icon = icons.Get(marker).Clone();
+                    icon.Mutate(x => x.Resize((int)(icon.Width * markerScale), (int)(icon.Height * markerScale)));
+                    c.DrawIcon(icon, ix, iy);
+                }
+
                 using Image<Rgba32> playerTriangle = icons.Get("player").Clone();
                 AffineTransformBuilder builder = new AffineTransformBuilder();
 
                 builder.AppendRotationRadians((float)rotationAngle);
                 playerTriangle.Mutate(x => x.Transform(builder));
                 c.DrawIcon(playerTriangle, imageX, imageY);
-
-                foreach (Marker marker in visibleMarkers)
-                {
-                    (int ix, int iy) = MapImageCache.ToMinimapCoordinate(pos.X, pos.Y, marker.X, marker.Y, picture.Width, picture.Height);
-                    c.DrawIcon(icons.Get(marker), ix, iy);
-                }
             });
 
             using Image<Rgba32> newMap = baseMap.Recenter(imageX, imageY);
+            //newMap.Mutate(c => c.Resize(pW, pH));
             System.Drawing.Image prev = picture.Image;
 
             SafeInvoke(() =>
