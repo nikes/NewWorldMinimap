@@ -20,3 +20,14 @@ jobs:
     - name: Build
       working-directory: ./src
       run: dotnet build
+
+    - name: Publish
+      working-directory: ./src/NewWorldMinimap
+      run: dotnet publish -c Release -o bin/publish
+
+    - name: Upload a Build Artifact
+      uses: actions/upload-artifact@v2.2.2
+      with:
+        name: NewWorldMinimap
+        path: ./src/NewWorldMinimap/bin/publish/**
+        if-no-files-found: error
