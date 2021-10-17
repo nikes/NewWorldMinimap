@@ -4,17 +4,24 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Numerics;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
+using System.Windows.Input;
 using NewWorldMinimap.Caches;
-using NewWorldMinimap.Core;
+using NewWorldMinimap.Core.PositionDetector;
+using NewWorldMinimap.Core.PositionProvider;
 using NewWorldMinimap.Core.Util;
 using NewWorldMinimap.Util;
+using NonInvasiveKeyboardHookLibrary;
+using Serilog;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
+using Rectangle = System.Drawing.Rectangle;
 
 namespace NewWorldMinimap
 {
@@ -24,21 +31,41 @@ namespace NewWorldMinimap
     /// <seealso cref="Form" />
     public class MapForm : Form
     {
-        private readonly PositionDetector pd = new PositionDetector();
-        private readonly PictureBox picture = new PictureBox();
-        private readonly MapImageCache map = new MapImageCache(4);
+        private enum PositionDetectors
+        {
+            ColorFilter,
+            Original,
+        }
+
+        private const int XOffset = 277;
+        private const int YOffset = 18;
+        private const int TextWidth = XOffset;
+        private const int TextHeight = YOffset;
+
+        private PositionDetectors ActivePositionDetector = PositionDetectors.ColorFilter;
+        private IPositionProvider _positionProvider;
+        private readonly MapControl picture = new MapControl();
+        private readonly MapImageCache map = new MapImageCache();
         private readonly MarkerCache markers = new MarkerCache();
         private readonly IconCache icons = new IconCache();
+        private readonly KeyboardHookManager khm = new KeyboardHookManager();
 
         private readonly ContextMenu menu = new ContextMenu();
         private readonly MenuItem alwaysOnTopButton;
+        private readonly MenuItem circularModeButton;
         private readonly List<MenuItem> screenItems = new List<MenuItem>();
-        private readonly List<MenuItem> refreshDelayItems = new List<MenuItem>();
+        private readonly MenuGroupHandler _menuRefreshDelay = new MenuGroupHandler();
+        private readonly MenuGroupHandler _menuPositionSource = new MenuGroupHandler();
+
         private readonly MenuItem debugButton;
 
         private int currentScreen;
-        private int refreshDelay;
+        private int refreshDelay = 60;
         private bool debugEnabled;
+        private bool overlayMode;
+
+        private float markerScale = 1.5f;
+        private float mapScale = 1f;
 
         private Thread? scannerThread;
 
@@ -48,10 +75,12 @@ namespace NewWorldMinimap
         public MapForm()
         {
             alwaysOnTopButton = new MenuItem("Always-on-top", ToggleAlwaysOnTop, Shortcut.None);
+            circularModeButton = new MenuItem("Circle Shape", ToggleShape, Shortcut.None);
             debugButton = new MenuItem("Debug", ToggleDebug, Shortcut.None);
             debugEnabled = false;
-
+            
             InitializeComponent();
+            UpdatePositionProvider();
             StartUpdateLoop();
         }
 
@@ -68,8 +97,47 @@ namespace NewWorldMinimap
             this.Text = name;
         }
 
+        private IPositionDetector GetPositionDetector()
+        {
+            var screenRect = ScreenGrabber.GetScreenRect(currentScreen);
+            var coordsRect = new Rectangle(screenRect.Width - XOffset, YOffset, TextWidth, TextHeight);
+            var imageSource = new Screenshotter(coordsRect);
+
+            if (ActivePositionDetector == PositionDetectors.ColorFilter)
+            {
+                return new ImageTesseractCFPositionDetector(imageSource, debugEnabled);
+            }
+
+            if (ActivePositionDetector == PositionDetectors.Original)
+            {
+                return new ImageTesseractOriginalPositionDetector(imageSource, debugEnabled);
+            }
+
+            return null;
+        }
+
+        private void UpdatePositionProvider()
+        {
+            var positionDetector = GetPositionDetector();
+            if (positionDetector == null)
+            {
+                Log.Warning("Could not get position detector");
+                return;
+            }
+
+            if (_positionProvider == null)
+            {
+                _positionProvider = new PredictingThreadedPositionProvider(positionDetector);
+            } else
+            {
+                _positionProvider.SetPositionDetector(positionDetector);
+            }
+        }
+
         private void InitializeComponent()
         {
+            khm.Start();
+            SetupHotkeys();
             this.SuspendLayout();
             this.ClientSize = new System.Drawing.Size(512, 512);
             SetName(Vector2.Zero);
@@ -85,6 +153,61 @@ namespace NewWorldMinimap
             BuildMenu();
         }
 
+        private void SetupHotkeys()
+        {
+            khm.RegisterHotkey(NonInvasiveKeyboardHookLibrary.ModifierKeys.Control, KeyInterop.VirtualKeyFromKey(Key.D), ToggleInteractivity);
+            khm.RegisterHotkey(NonInvasiveKeyboardHookLibrary.ModifierKeys.Control | NonInvasiveKeyboardHookLibrary.ModifierKeys.Alt, KeyInterop.VirtualKeyFromKey(Key.S), ToggleVisibility);
+        }
+
+        private void ToggleInteractivity()
+        {
+            if (!this.Visible)
+            {
+                return;
+            }
+
+            overlayMode = !overlayMode;
+            SafeInvoke(() =>
+            {
+                this.TransparencyKey = System.Drawing.Color.Empty;
+
+                if (overlayMode)
+                {
+                    this.TopMost = true;
+                    this.FormBorderStyle = FormBorderStyle.None;
+                    this.TransparencyKey = BackColor;
+
+                    int style = (int)NativeMethods.GetWindowLongPtr(this.Handle, -20);
+                    int newStyle = style | 0x80000 | 0x20;
+                    NativeMethods.SetWindowLongPtr(this.Handle, -20, new IntPtr(newStyle));
+                }
+                else
+                {
+                    this.TopMost = alwaysOnTopButton.Checked;
+                    this.FormBorderStyle = FormBorderStyle.Sizable;
+                    int style = (int)NativeMethods.GetWindowLongPtr(this.Handle, -20);
+                    int newStyle = style & ~0x80000 & ~0x20;
+                    NativeMethods.SetWindowLongPtr(this.Handle, -20, new IntPtr(newStyle));
+                }
+
+                if (!overlayMode && picture.IsCircular)
+                {
+                    this.TransparencyKey = BackColor;
+                }
+            });
+        }
+
+        private void ToggleVisibility()
+        {
+            SafeInvoke(() => this.Visible = !this.Visible);
+        }
+
+        private void SetDetectorSource(PositionDetectors detector)
+        {
+            ActivePositionDetector = detector;
+            UpdatePositionProvider();
+        }
+
         private void BuildMenu()
         {
             this.ContextMenu = menu;
@@ -97,46 +220,39 @@ namespace NewWorldMinimap
                 screenItems.Add(item);
             }
 
-            CreateRefreshMenuItem(0);
-            CreateRefreshMenuItem(200);
-            CreateRefreshMenuItem(350);
-            CreateRefreshMenuItem(1000);
+            ((PositionDetectors[])Enum.GetValues(typeof(PositionDetectors))).ToList().ForEach(x => {
+                _menuPositionSource.AddItem(
+                    $"Position Source: {x}",
+                    (s, e) => SetDetectorSource(x),
+                    selected: x == ActivePositionDetector
+                );
+            });
+
+            foreach (var delay in new[] {30, 60, 90, 160})
+            {
+                _menuRefreshDelay.AddItem($"Refresh delay: {delay}ms.", (s, e) => { refreshDelay = delay; }, selected: delay == refreshDelay);
+            }
 
             menu.MenuItems.Add(alwaysOnTopButton);
+            menu.MenuItems.Add(circularModeButton);
             menu.MenuItems.Add("-");
             menu.MenuItems.AddRange(screenItems.ToArray());
-            menu.MenuItems.Add("-");
-            menu.MenuItems.AddRange(refreshDelayItems.ToArray());
-            menu.MenuItems.Add("-");
-            menu.MenuItems.Add(debugButton);
+            _menuRefreshDelay.CreateMenu(menu.MenuItems);
+            _menuPositionSource.CreateMenu(menu.MenuItems);
+            //menu.MenuItems.Add("-");
+            //menu.MenuItems.Add(debugButton);
 
             SelectScreen(ScreenGrabber.GetPrimaryScreenIndex());
-            SelectRefreshDelay(2, 350);
         }
 
-        private void CreateRefreshMenuItem(int delay)
-        {
-            int index = refreshDelayItems.Count;
-            refreshDelayItems.Add(new MenuItem($"Refresh delay: {delay}ms.", (s, e) => SelectRefreshDelay(index, delay), Shortcut.None));
-        }
+
 
         private void SelectScreen(int index)
         {
             screenItems[currentScreen].Checked = false;
             currentScreen = index;
             screenItems[index].Checked = true;
-        }
-
-        private void SelectRefreshDelay(int index, int delay)
-        {
-            refreshDelay = delay;
-
-            foreach (MenuItem mi in refreshDelayItems)
-            {
-                mi.Checked = false;
-            }
-
-            refreshDelayItems[index].Checked = true;
+            UpdatePositionProvider();
         }
 
         private void ToggleAlwaysOnTop(object sender, EventArgs e)
@@ -153,6 +269,25 @@ namespace NewWorldMinimap
             }
         }
 
+        private void ToggleShape(object sender, EventArgs e)
+        {
+            circularModeButton.Checked = !circularModeButton.Checked;
+            SafeInvoke(() =>
+            {
+                if (circularModeButton.Checked)
+                {
+                    picture.IsCircular = true;
+                }
+                else
+                {
+                    picture.IsCircular = false;
+                }
+
+                this.TransparencyKey = System.Drawing.Color.Empty;
+                this.TransparencyKey = BackColor;
+            });
+        }
+
         private void ToggleDebug(object sender, EventArgs e)
         {
             if (debugButton.Checked)
@@ -165,6 +300,8 @@ namespace NewWorldMinimap
                 debugButton.Checked = true;
                 this.debugEnabled = true;
             }
+
+            UpdatePositionProvider();
         }
 
         private void UpdateSize()
@@ -182,6 +319,8 @@ namespace NewWorldMinimap
 
         private void OnClose(object sender, EventArgs e)
         {
+            khm.UnregisterAll();
+            khm.Stop();
             Environment.Exit(0);
         }
 
@@ -196,71 +335,28 @@ namespace NewWorldMinimap
         {
             Stopwatch sw = new Stopwatch();
 
-            Vector2 lastPos = Vector2.Zero;
-            double rotationAngle = 0;
             int i = 0;
             while (true)
             {
                 sw.Restart();
-
-                if (pd.TryGetPosition(ScreenGrabber.TakeScreenshot(currentScreen), out Vector2 pos, this.debugEnabled, out Image<Rgba32> debugImage))
+                if (Visible && WindowState != FormWindowState.Minimized)
                 {
-                    using Image<Rgba32> baseMap = map.GetTileForCoordinate(pos.X, pos.Y);
-
-                    (int imageX, int imageY) = map.ToMinimapCoordinate(pos.X, pos.Y, pos.X, pos.Y);
-
-                    (int tileX, int tileY) = MapImageCache.GetTileCoordinatesForCoordinate(pos.X, pos.Y);
-                    IEnumerable<Marker> visibleMarkers = markers.Get(tileX, tileY);
-
-                    baseMap.Mutate(c =>
-                    {
-                        using Image<Rgba32> playerTriangle = icons.Get("player").Clone();
-                        AffineTransformBuilder builder = new AffineTransformBuilder();
-                        Vector2 posDifference = pos - lastPos;
-
-                        if (posDifference != Vector2.Zero)
-                        {
-                            rotationAngle = Math.Atan2(posDifference.X, posDifference.Y);
-                        }
-
-                        builder.AppendRotationRadians((float)rotationAngle);
-                        playerTriangle.Mutate(x => x.Transform(builder));
-                        c.DrawImage(playerTriangle, imageX, imageY);
-
-                        foreach (Marker marker in visibleMarkers)
-                        {
-                            (int ix, int iy) = map.ToMinimapCoordinate(pos.X, pos.Y, marker.X, marker.Y);
-                            c.DrawImage(icons.Get(marker), ix, iy);
-                        }
-
-                        if (debugImage != null)
-                        {
-                            debugImage.Mutate(x => x.Resize(debugImage.Width / 2, debugImage.Height / 2));
-                            c.DrawImage(debugImage, imageX - (this.Width / 2), imageY - (this.Height / 2));
-                            debugImage.Dispose();
-                        }
-                    });
-
-                    using Image<Rgba32> newMap = baseMap.Recenter(imageX, imageY);
-                    System.Drawing.Image prev = picture.Image;
-
-                    SafeInvoke(() =>
-                    {
-                        SetName(pos);
-                        picture.Image = newMap.ToBitmap();
-                        UpdateSize();
-                    });
-
-                    prev?.Dispose();
-
-                    lastPos = pos;
+                    if (_positionProvider.TryGetPosition(out Vector2 pos))
+                {
+                    Redraw(pos, _positionProvider.ActorAngle);
                 }
                 else
                 {
-                    Console.WriteLine($"{i}: Failure");
+                    Log.Debug("Read Failure");
                 }
 
-                i++;
+                if (_positionProvider.DebugImage != null)
+                {
+                    DrawDebugImage(_positionProvider.DebugImage);
+                }
+
+                    i++;
+                }
 
                 sw.Stop();
                 long elapsed = sw.ElapsedMilliseconds;
@@ -268,6 +364,78 @@ namespace NewWorldMinimap
                 if (elapsed < refreshDelay)
                 {
                     Thread.Sleep(refreshDelay - (int)elapsed);
+                }
+            }
+        }
+
+        private void Redraw(Vector2 pos, double rotationAngle)
+        {
+            int pW = (int)(picture.Width * mapScale);
+            int pH = (int)(picture.Height * mapScale);
+
+            using Image<Rgba32> baseMap = map.GetTileForCoordinate(pos.X, pos.Y, pW, pH);
+
+            (int imageX, int imageY) = MapImageCache.ToMinimapCoordinate(pos.X, pos.Y, pos.X, pos.Y, pW, pH);
+
+            (int tileX, int tileY) = MapImageCache.GetTileCoordinatesForCoordinate(pos.X, pos.Y);
+            IEnumerable<Marker> visibleMarkers = markers.Get(tileX, tileY, pW, pH);
+
+            baseMap.Mutate(c =>
+            {
+                
+                foreach (Marker marker in visibleMarkers)
+                {
+                    (int ix, int iy) = MapImageCache.ToMinimapCoordinate(pos.X, pos.Y, marker.X, marker.Y, picture.Width, picture.Height);
+                    var icon = icons.Get(marker).Clone();
+                    icon.Mutate(x => x.Resize((int)(icon.Width * markerScale), (int)(icon.Height * markerScale)));
+                    c.DrawIcon(icon, ix, iy);
+                }
+
+                using Image<Rgba32> playerTriangle = icons.Get("player").Clone();
+                AffineTransformBuilder builder = new AffineTransformBuilder();
+
+                builder.AppendRotationRadians((float)rotationAngle);
+                playerTriangle.Mutate(x => x.Transform(builder));
+                c.DrawIcon(playerTriangle, imageX, imageY);
+            });
+
+            using Image<Rgba32> newMap = baseMap.Recenter(imageX, imageY);
+            //newMap.Mutate(c => c.Resize(pW, pH));
+            System.Drawing.Image prev = picture.Image;
+
+            SafeInvoke(() =>
+            {
+                SetName(pos);
+                picture.Image = newMap.ToBitmap();
+                UpdateSize();
+            });
+
+            prev?.Dispose();
+        }
+
+        private void DrawDebugImage(Image<Rgba32> img)
+        {
+            if (img is not null)
+            {
+                img.Mutate(x => x.Resize(img.Width / 2, img.Height / 2));
+                Bitmap bmp = img.ToBitmap();
+
+                if (picture.Image is null)
+                {
+                    picture.Image = bmp;
+                }
+                else
+                {
+                    SafeInvoke(() =>
+                    {
+                        using Graphics g = Graphics.FromImage(picture.Image);
+                        g.DrawImage(bmp, (picture.Image.Width / 2) - (this.Width / 2), (picture.Image.Height / 2) - (this.Height / 2));
+                        g.Save();
+                        picture.Image = picture.Image;
+                    });
+
+                    img.Dispose();
+                    bmp.Dispose();
                 }
             }
         }
@@ -281,6 +449,17 @@ namespace NewWorldMinimap
             catch (InvalidOperationException)
             {
             }
+        }
+
+        private static class NativeMethods
+        {
+            [DllImport("user32")]
+            [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+            public static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
+
+            [DllImport("user32")]
+            [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+            public static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
         }
     }
 }

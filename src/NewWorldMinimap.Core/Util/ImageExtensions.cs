@@ -89,6 +89,33 @@ namespace NewWorldMinimap.Core.Util
             => context.DrawImage(img, new SixLabors.ImageSharp.Point(x, y), 1);
 
         /// <summary>
+        /// Draws a centered icon.
+        /// </summary>
+        /// <param name="context">The context.</param>
+        /// <param name="img">The icon image.</param>
+        /// <param name="x">The x coordinate.</param>
+        /// <param name="y">The y coordinate.</param>
+        /// <returns>The same context.</returns>
+        public static IImageProcessingContext DrawIcon(this IImageProcessingContext context, SixLabors.ImageSharp.Image img, int x, int y)
+        {
+            if (img is null)
+            {
+                throw new ArgumentNullException(nameof(img));
+            }
+
+            try
+            {
+                context.DrawImage(img, x - (img.Width / 2), y - (img.Height / 2));
+            }
+            catch (ImageProcessingException)
+            {
+                // Ignore.
+            }
+
+            return context;
+        }
+
+        /// <summary>
         /// Dilates the binary image with the gives radius.
         /// </summary>
         /// <param name="context">The context.</param>
@@ -104,6 +131,31 @@ namespace NewWorldMinimap.Core.Util
                         r[x] = c.X == 1 && c.Y == 1 && c.Z == 1 ? White : Black;
                     }
                 });
+
+        /// <summary>
+        /// Filters out colors not close to filterColor and replaces with black
+        /// </summary>
+        /// <param name="context">Image context</param>
+        /// <param name="filterColor">RGBA of color to check against</param>
+        /// <param name="colorDistanceAllowed">Distance from given color allowed</param>
+        /// <returns></returns>
+
+        public static IImageProcessingContext ColorFilter(this IImageProcessingContext context, Vector4 filterColor, float colorDistanceAllowed = 0.415f)
+        // colorDistanceAllowed found by trial and error
+
+        => context.ProcessPixelRowsAsVector4(r =>
+        {
+            float colorDistance;
+            for (int x = 0; x < r.Length; x++)
+            {
+                colorDistance = (r[x] - filterColor).Length();
+                if (colorDistance > colorDistanceAllowed)
+                {
+                    r[x] = Black;
+                }
+            }
+        });
+        
 
         /// <summary>
         /// Detects white pixels.

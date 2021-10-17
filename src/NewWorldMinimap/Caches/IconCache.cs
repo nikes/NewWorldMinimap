@@ -51,6 +51,9 @@ namespace NewWorldMinimap.Caches
             Register("document.png", "documents", Color.LightYellow);
 
             Register("plant.png", "plants", Color.Green);
+            Register("plant.png", "hemp", Color.DeepPink);
+            Register("plant.png", "hemp_t4", Color.Blue);
+            Register("plant.png", "hemp_t5", Color.Red);
 
             Register("skull.png", "monsters", Color.Green);
             Register("turkey.png", "turkey", Color.Brown);
