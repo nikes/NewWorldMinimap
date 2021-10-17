@@ -19,4 +19,4 @@ jobs:
 
     - name: Build
       working-directory: ./src
-      run: dotnet build /warnaserror
+      run: dotnet build
